@@ -29,6 +29,7 @@ function handler.message(fd, msg, sz)
 end
 
 function handler.connect(fd, addr)
+    print("gate handler.connect ", fd, addr)
 	local c = {
 		fd = fd,
 		ip = addr,

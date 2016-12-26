@@ -5,11 +5,13 @@ local CMD = {}
 local SOCKET = {}
 local gate
 local agent = {}
+local idle_fd = {}
 
 function SOCKET.open(fd, addr)
 	skynet.error("New client from : " .. addr)
-	agent[fd] = skynet.newservice("agent")
-	skynet.call(agent[fd], "lua", "start", { gate = gate, client = fd, watchdog = skynet.self() })
+	--agent[fd] = skynet.newservice("agent")
+	--skynet.call(agent[fd], "lua", "start", { gate = gate, client = fd, watchdog = skynet.self() })
+    idle_fd[fd] = {addr = addr, ws = {handshaked = false}}
 end
 
 local function close_agent(fd)

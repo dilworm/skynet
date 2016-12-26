@@ -1,6 +1,9 @@
 local skynet = require "skynet"
 local socketdriver = require "socketdriver"
 local wsproto = require "ws.ws_proto"
+local netpack = require "netpack"
+local crypto = require "crypt"
+local str_lower = string.lower
 
 local _M = {}
 
@@ -48,7 +51,7 @@ local function handle_handshake(conn)
        print("not valid protocol!")
        return nil, "not valid protocol"
     end
-    local req  = wbproto.parse(str)
+    local req  = wsproto.parse(str)
     local headers = req.headers
     local val = headers.Upgrade or headers.upgrade
     if type(val) == "table" then
@@ -115,29 +118,42 @@ local function handle_dataframe(conn)
 end
 
 function _M.unpack(msg, sz)
-    local socket_type, fd, buffer, size = socketdriver.unpack(msg, sz)
-    local conn = connection[fd] 
-    if conn then
-        if conn.handshaked then
-            return socket_type, fd, buffer, size
-        else
-            conn.buffer =  conn.buffer + buffer
-            conn.buf_size = conn.buf_size + size
-            local ok, ret = pcall(handle_handshake(conn))
-            if ok then
-                return 2, conn.fd, conn.addr
+    local pack = table.pack(socketdriver.unpack(msg, sz))
+    local socket_type = pack[1]
+    if socket_type == 2 then -- listen succ,just ignore
+        return 
+    end
+    if socket_type == 1 then -- data
+        local fd, size, buffer = pack[2], pack[3], netpack.tostring(pack[4], pack[3])
+        print(fd, size, buffer)
+        local conn = connection[fd] 
+        if conn then
+            if conn.handshaked then
+                return socket_type, fd, buffer, size
             else
-                skynet.error("Handshake failed, fd = %d", fd)
-                socketdriver.close(fd)
-                return 
+                conn.buffer =  conn.buffer..buffer
+                conn.buf_size = conn.buf_size + size
+                local ok, ret = pcall(handle_handshake, conn)
+                if ok then
+                    return 2, conn.fd, conn.addr
+                else
+                    skynet.error("Handshake failed, fd = %d", fd)
+                    socketdriver.close(fd)
+                    return 
+                end
             end
+        else
+            skynet.error("Drop msg from fd = %d", fd)
         end
-    elseif socket_type == 2 then
+    elseif socket_type == 4 then -- recv new connection and wait for handshake
+        fd = pack[3]
+        addr = pack[4]
         assert(not connection[fd])
-        connection[fd] = {addr = buffer, handshaked=false, buffer="", buf_size=0}
-        print("cache new raw connection fd = %d, addr = %s", fd, buffer)
+        print(string.format("new raw connection fd = %s, addr = %s", fd, addr))
+        connection[fd] = {addr = addr, handshaked=false, buffer="", buf_size=0}
+        socketdriver.start(fd)
     else
-        skynet.error("Drop msg from fd = %d, type=%d", fd, socket_type)
+        print("warn or error on fd:"..fd)
     end
 end
 

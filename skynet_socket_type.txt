@@ -5,3 +5,9 @@ skynet-src/skynet_socket.h:9:#define SKYNET_SOCKET_TYPE_ACCEPT 4
 skynet-src/skynet_socket.h:10:#define SKYNET_SOCKET_TYPE_ERROR 5
 skynet-src/skynet_socket.h:11:#define SKYNET_SOCKET_TYPE_UDP 6
 skynet-src/skynet_socket.h:12:#define SKYNET_SOCKET_TYPE_WARNING 7
+#define TYPE_DATA 1
+#define TYPE_MORE 2
+#define TYPE_ERROR 3
+#define TYPE_OPEN 4
+#define TYPE_CLOSE 5
+#define TYPE_WARNING 6
