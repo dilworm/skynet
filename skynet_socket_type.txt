@@ -1,0 +1,7 @@
+skynet-src/skynet_socket.h:6:#define SKYNET_SOCKET_TYPE_DATA 1
+skynet-src/skynet_socket.h:7:#define SKYNET_SOCKET_TYPE_CONNECT 2
+skynet-src/skynet_socket.h:8:#define SKYNET_SOCKET_TYPE_CLOSE 3
+skynet-src/skynet_socket.h:9:#define SKYNET_SOCKET_TYPE_ACCEPT 4
+skynet-src/skynet_socket.h:10:#define SKYNET_SOCKET_TYPE_ERROR 5
+skynet-src/skynet_socket.h:11:#define SKYNET_SOCKET_TYPE_UDP 6
+skynet-src/skynet_socket.h:12:#define SKYNET_SOCKET_TYPE_WARNING 7
