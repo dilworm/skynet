@@ -125,7 +125,7 @@ function _M.unpack(msg, sz)
     end
     if socket_type == 1 then -- data
         local fd, size, buffer = pack[2], pack[3], netpack.tostring(pack[4], pack[3])
-        print(fd, size, buffer)
+        --print(fd, size, buffer)
         local conn = connection[fd] 
         if conn then
             if conn.handshaked then
@@ -133,9 +133,12 @@ function _M.unpack(msg, sz)
             else
                 conn.buffer =  conn.buffer..buffer
                 conn.buf_size = conn.buf_size + size
-                local ok, ret = pcall(handle_handshake, conn)
+                local ok, ret, reply = pcall(handle_handshake, conn)
                 if ok then
-                    return 2, conn.fd, conn.addr
+                    if ret == 0 then
+                        socketdriver.send(conn.fd, reply)
+                        return 2, conn.fd, conn.addr
+                    end
                 else
                     skynet.error("Handshake failed, fd = %d", fd)
                     socketdriver.close(fd)
@@ -150,7 +153,7 @@ function _M.unpack(msg, sz)
         addr = pack[4]
         assert(not connection[fd])
         print(string.format("new raw connection fd = %s, addr = %s", fd, addr))
-        connection[fd] = {addr = addr, handshaked=false, buffer="", buf_size=0}
+        connection[fd] = {fd = fd, addr = addr, handshaked=false, buffer="", buf_size=0}
         socketdriver.start(fd)
     else
         print("warn or error on fd:"..fd)
