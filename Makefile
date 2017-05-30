@@ -46,7 +46,7 @@ update3rd :
 
 CSERVICE = snlua logger gate harbor
 LUA_CLIB = skynet socketdriver bson mongo md5 netpack \
-  clientsocket memory profile multicast \
+  clientsocket memory profile profile_ex multicast \
   cluster crypt sharedata stm sproto lpeg \
   mysqlaux debugchannel
 
@@ -101,6 +101,9 @@ $(LUA_CLIB_PATH)/memory.so : lualib-src/lua-memory.c | $(LUA_CLIB_PATH)
 	$(CC) $(CFLAGS) $(SHARED) -Iskynet-src $^ -o $@ 
 
 $(LUA_CLIB_PATH)/profile.so : lualib-src/lua-profile.c | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) $^ -o $@ 
+
+$(LUA_CLIB_PATH)/profile_ex.so : lualib-src/lua-profile_ex.c | $(LUA_CLIB_PATH)
 	$(CC) $(CFLAGS) $(SHARED) $^ -o $@ 
 
 $(LUA_CLIB_PATH)/multicast.so : lualib-src/lua-multicast.c | $(LUA_CLIB_PATH)
