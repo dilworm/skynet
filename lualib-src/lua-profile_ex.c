@@ -1,11 +1,12 @@
 #define LUA_LIB
 
 #include <stdio.h>
-#include <lua.h>
+#include <lua.h> 
 #include <lauxlib.h>
 #include <ldebug.h>
 
 #include <time.h>
+#include <string.h>
 
 #if defined(__APPLE__)
 #include <mach/task.h>
@@ -16,6 +17,9 @@
 #define MICROSEC 1000000
 
 // #define DEBUG_LOG
+
+static int callstack_id;
+static int stat_id;
 
 static double
 get_time() {
@@ -51,9 +55,39 @@ diff_time(double start) {
 	}
 }
 
-static void hook_callback(lua_State* L, lua_Debug* ar) {
-    lua_Debug pre_ar;
-    if (lua_getstack(L, 1, &pre_ar)) {
+static int
+on_enter_function(lua_State* L, lua_Debug* ar) {
+    return 0;
+}
+
+static int 
+on_leave_function(lua_State* L, lua_Debug* ar) {
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
+    lua_pushthread(L);
+    lua_rawget(L, -2);
+    if (lua_isnil(L, -1)) { return 0;}
+
+    lua_Integer len = luaL_len(L, -1);
+    if (len < 1) { return 0; }
+    lua_rawgeti(L, -1, len);
+
+    
+
+    return 1;
+}
+
+static void 
+hook_callback(lua_State* L, lua_Debug* ar) {
+    int ret = lua_getinfo(L, "nS", ar);
+    if (!strcmp(ar->what, "Lua")) { // Only hook Lua functions
+        return; 
+        //luaL_error(L, "test callback, name=%s,what=%s,line=%d", 
+         //   ar->source, ar->what, ar->linedefined);
+    }
+    if (ar->event == LUA_HOOKRET) {
+        on_leave_function(L, ar);
+    } else {
+        on_enter_function(L, ar);
     }
 }
 
@@ -66,13 +100,14 @@ lhook(lua_State* L) {
         lua_pushthread(L);
     }
     lua_pushvalue(L, 1);
-    lua_rawget(L, lua_upvalueindex(6));
+    lua_rawget(L, lua_upvalueindex(4));
     if (!lua_isnil(L, -1)) { // already hooked
+        luaL_error(L, "Alread hook");
         return 0;
     }
     lua_pushvalue(L, 1);
     lua_pushboolean(L, 1);
-    lua_rawset(L, lua_upvalueindex(6));
+    lua_rawset(L, lua_upvalueindex(4));
 
     lua_sethook(L, (lua_Hook)hook_callback, LUA_MASKCALL | LUA_MASKRET, 0);
     return 0;
@@ -88,13 +123,13 @@ lunhook(lua_State* L) {
     }
 
     lua_pushvalue(L, 1);
-    lua_rawget(L, lua_upvalueindex(6));
+    lua_rawget(L, lua_upvalueindex(4));
     if (lua_isnil(L, -1)) {
         return 0;
     }
     lua_pushvalue(L, 1);
     lua_pushnil(L);
-    lua_rawset(L, lua_upvalueindex(6));
+    lua_rawset(L, lua_upvalueindex(4));
     
     lua_State* L1 = lua_tothread(L, 1);
     lua_sethook(L1, NULL, 0, 0);
@@ -252,7 +287,7 @@ lyield_co(lua_State *L) {
 }
 
 LUAMOD_API int
-luaopen_profile(lua_State *L) {
+luaopen_profile_ex(lua_State *L) {
 	luaL_checkversion(L);
 	luaL_Reg l[] = {
 		{ "start", lstart },
@@ -268,34 +303,39 @@ luaopen_profile(lua_State *L) {
 	luaL_newlibtable(L,l);
 	lua_newtable(L);	// table thread->start time
 	lua_newtable(L);	// table thread->total time
-
-	lua_newtable(L);	// weak table
-	lua_pushliteral(L, "kv");
-	lua_setfield(L, -2, "__mode");
-
-	lua_pushvalue(L, -1);
-	lua_setmetatable(L, -3); 
-	lua_setmetatable(L, -3);
-
-	lua_pushnil(L);	// cfunction (coroutine.resume or coroutine.yield)
-
-    // ------------------------------------------------------------------------
-    lua_newtable(L);    // functions -> {functionN = {time, count, file, name}, ...}
-    lua_newtable(L);    // threads -> {threadN = callstackN,...}
     lua_newtable(L);    // threads -> {threadN = is_hooked, ...}
 
 	lua_newtable(L);	// weak table
 	lua_pushliteral(L, "kv");
 	lua_setfield(L, -2, "__mode");
-	lua_pushvalue(L, -1);
-	lua_pushvalue(L, -1);
 
+	lua_pushvalue(L, -1);
+	lua_pushvalue(L, -1);
 	lua_setmetatable(L, -4); 
 	lua_setmetatable(L, -4);
+
+	lua_pushnil(L);	// cfunction (coroutine.resume or coroutine.yield)
+
+    // ------------------------------------------------------------------------
+    lua_newtable(L);    // functions -> {functionN = {time, count, file, name}, ...}
+	lua_newtable(L);	// weak table
+	lua_pushliteral(L, "kv");
+	lua_setfield(L, -2, "__mode");
+	lua_setmetatable(L, -2);
+
+    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+
+    lua_newtable(L);    // threads -> {threadN = callstackN,...}
+	lua_newtable(L);	// weak table
+	lua_pushliteral(L, "kv");
+	lua_setfield(L, -2, "__mode");
+	lua_setmetatable(L, -2);
+
+    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     // ------------------------------------------------------------------------
 
 	//luaL_setfuncs(L,l,3);
-	luaL_setfuncs(L,l,6);
+	luaL_setfuncs(L,l,4);
 
 	int libtable = lua_gettop(L);
 
