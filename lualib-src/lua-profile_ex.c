@@ -55,34 +55,74 @@ diff_time(double start) {
 	}
 }
 
+
 static int
 on_enter_function(lua_State* L, lua_Debug* ar) {
+    int newtable = 0;
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
+    lua_pushthread(L);
+    lua_rawget(L, -2); // get callstack table for this thread
+
+    if (strcmp("foo", ar->name) == 0)
+        luaL_error(L, "name=%s, new=%d, top=%d", ar->name, newtable, lua_gettop(L));
+
+    if (lua_isnil(L, -1)) { 
+        lua_pop(L, 1);
+        lua_pushthread(L);
+        lua_newtable(L);
+        newtable = 1;
+    }
+
+    //luaL_error(L, "new=%d, top=%d", newtable, lua_gettop(L));
+
+    lua_Integer len = luaL_len(L, -1);
+
+    lua_newtable(L); // stack item for this call
+    lua_pushvalue(L, 2); 
+    lua_setfield(L, -2, "func");
+    lua_pushinteger(L, ar->linedefined);
+    lua_setfield(L, -2, "linedefined");
+    lua_pushstring(L, ar->short_src);
+    lua_setfield(L, -2, "short_src");
+    lua_pushstring(L, ar->name);
+    lua_setfield(L, -2, "name");
+
+    lua_rawseti(L, -2, len+1);
+
+    if (newtable == 1) {
+        lua_rawset(L, -3);
+    }
+
     return 0;
 }
 
 static int 
 on_leave_function(lua_State* L, lua_Debug* ar) {
+    if (strcmp("foo", ar->name) == 0)
+        luaL_error(L, "=====enter leave %s", ar->name);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
-    lua_rawget(L, -2);
-    if (lua_isnil(L, -1)) { return 0;}
+    lua_rawget(L, -2); // get callstack table for this thread.
+    if (lua_isnil(L, -1)) { 
+        return 0; 
+    }
 
     lua_Integer len = luaL_len(L, -1);
-    if (len < 1) { return 0; }
     lua_rawgeti(L, -1, len);
-
-    
-
+    if (!lua_istable(L, -1)) { return 0; }
+    lua_getfield(L, -1, "func");
+    int equal = lua_rawequal(L, -1, -4);
+    if (equal != 1) {
+        return luaL_error(L, "find no enter func for this leave.");
+    }
     return 1;
 }
 
 static void 
 hook_callback(lua_State* L, lua_Debug* ar) {
-    int ret = lua_getinfo(L, "nS", ar);
+    lua_getinfo(L, "nfS", ar); // 'f' indicate that 'func' is pushed into the stack.
     if (!strcmp(ar->what, "Lua")) { // Only hook Lua functions
         return; 
-        //luaL_error(L, "test callback, name=%s,what=%s,line=%d", 
-         //   ar->source, ar->what, ar->linedefined);
     }
     if (ar->event == LUA_HOOKRET) {
         on_leave_function(L, ar);

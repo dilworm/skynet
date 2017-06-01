@@ -2,6 +2,7 @@ local skynet = require "skynet"
 local p = require "profile_ex"
 
 local function foo()
+    print("===foo===")
 end
 
 local function test()
@@ -9,7 +10,7 @@ local function test()
 
     p.hook()
     foo()
-    p.unhook()
+    --p.unhook()
 end
 
 skynet.start(function() 
