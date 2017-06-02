@@ -58,14 +58,13 @@ diff_time(double start) {
 
 static int
 on_enter_function(lua_State* L, lua_Debug* ar) {
-    int newtable = 0;
+    printf("on_enter_function name=%s, top=%d\n", ar->name, lua_gettop(L));
+    int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
     lua_rawget(L, -2); // get callstack table for this thread
 
-    if (strcmp("foo", ar->name) == 0)
-        luaL_error(L, "name=%s, new=%d, top=%d", ar->name, newtable, lua_gettop(L));
-
+    int newtable = 0;
     if (lua_isnil(L, -1)) { 
         lua_pop(L, 1);
         lua_pushthread(L);
@@ -73,12 +72,12 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
         newtable = 1;
     }
 
-    //luaL_error(L, "new=%d, top=%d", newtable, lua_gettop(L));
-
     lua_Integer len = luaL_len(L, -1);
 
-    lua_newtable(L); // stack item for this call
-    lua_pushvalue(L, 2); 
+    // new callstack item for this call
+    lua_newtable(L); 
+    lua_pushvalue(L, funcindex); 
+    //printf("enterfunc=%s, %d, %p\n", ar->name, lua_type(L, funcindex), lua_topointer(L, funcindex));
     lua_setfield(L, -2, "func");
     lua_pushinteger(L, ar->linedefined);
     lua_setfield(L, -2, "linedefined");
@@ -86,20 +85,27 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_setfield(L, -2, "short_src");
     lua_pushstring(L, ar->name);
     lua_setfield(L, -2, "name");
+    //double ti = get_time();
+    //lua_pushnumber(L, ti);
 
+    // push callstack item
     lua_rawseti(L, -2, len+1);
+    //printf("on_enter_function cllen=%d", (int)luaL_len(L, -1));
 
     if (newtable == 1) {
         lua_rawset(L, -3);
     }
 
+    printf("on_enter_function succ, name=%s, new=%d \n", ar->name, newtable);
     return 0;
 }
 
 static int 
 on_leave_function(lua_State* L, lua_Debug* ar) {
-    if (strcmp("foo", ar->name) == 0)
-        luaL_error(L, "=====enter leave %s", ar->name);
+    //if (strcmp("foo", ar->name) == 0)
+        //luaL_error(L, "=====enter leave %s", ar->name);
+    printf("on_leave_function name=%s, top=%d %d\n", ar->name, lua_gettop(L), lua_type(L,-1));
+    int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
     lua_rawget(L, -2); // get callstack table for this thread.
@@ -108,22 +114,35 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
     }
 
     lua_Integer len = luaL_len(L, -1);
-    lua_rawgeti(L, -1, len);
+    lua_rawgeti(L, -1, len); // get callstack item for this function
     if (!lua_istable(L, -1)) { return 0; }
     lua_getfield(L, -1, "func");
-    int equal = lua_rawequal(L, -1, -4);
+    //printf("on_leave_function %s=%p\n", ar->name, lua_topointer(L, -1));
+    int equal = lua_rawequal(L, -1, funcindex); // check callstack item is the one we push in on_enter_function.
     if (equal != 1) {
-        return luaL_error(L, "find no enter func for this leave.");
+        return luaL_error(L, "find no enter func for '%s' leave.", ar->name);
     }
+
+    lua_pop(L, 2);
+
+    // pop callstack item
+    lua_pushnil(L);
+    lua_rawseti(L,-2,len);
+
+    printf("on_leave_function succ %s, cllen=%d\n", ar->name, (int)luaL_len(L, -1));
+
     return 1;
 }
-
 static void 
 hook_callback(lua_State* L, lua_Debug* ar) {
     lua_getinfo(L, "nfS", ar); // 'f' indicate that 'func' is pushed into the stack.
-    if (!strcmp(ar->what, "Lua")) { // Only hook Lua functions
+
+    //printf("hook_callback what=%s, name=%s, top=%d\n", ar->what, ar->name, lua_gettop(L));
+
+    if (strcmp(ar->what, "Lua") != 0) { // Only hook Lua functions
         return; 
     }
+
     if (ar->event == LUA_HOOKRET) {
         on_leave_function(L, ar);
     } else {

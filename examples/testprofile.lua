@@ -1,8 +1,17 @@
 local skynet = require "skynet"
 local p = require "profile_ex"
 
+local a = 0
+local function _foo()
+    a = 2
+end
+
 local function foo()
-    print("===foo===")
+    a = 3
+    _foo()
+    --skynet.sleep(100)
+    --local a = 2
+   -- print("===foo===")
 end
 
 local function test()
