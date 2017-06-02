@@ -58,7 +58,7 @@ diff_time(double start) {
 
 static int
 on_enter_function(lua_State* L, lua_Debug* ar) {
-    printf("on_enter_function name=%s, top=%d\n", ar->name, lua_gettop(L));
+    //printf("on_enter_function name=%s, top=%d\n", ar->name, lua_gettop(L));
     int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
@@ -85,8 +85,8 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_setfield(L, -2, "short_src");
     lua_pushstring(L, ar->name);
     lua_setfield(L, -2, "name");
-    //double ti = get_time();
-    //lua_pushnumber(L, ti);
+    lua_pushnumber(L, get_time());
+    lua_setfield(L, -2, "enter_time");
 
     // push callstack item
     lua_rawseti(L, -2, len+1);
@@ -96,7 +96,7 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
         lua_rawset(L, -3);
     }
 
-    printf("on_enter_function succ, name=%s, new=%d \n", ar->name, newtable);
+    printf("on_enter_function succ, short_src=%s, name=%s, new=%d cslen=%llu\n", ar->source, ar->name, newtable, len+1);
     return 0;
 }
 
@@ -104,7 +104,7 @@ static int
 on_leave_function(lua_State* L, lua_Debug* ar) {
     //if (strcmp("foo", ar->name) == 0)
         //luaL_error(L, "=====enter leave %s", ar->name);
-    printf("on_leave_function name=%s, top=%d %d\n", ar->name, lua_gettop(L), lua_type(L,-1));
+    //printf("on_leave_function name=%s, top=%d %d\n", ar->name, lua_gettop(L), lua_type(L,-1));
     int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
@@ -125,13 +125,13 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
 
     lua_pop(L, 2);
 
-    // pop callstack item
+    // pop callstack item  callstack[co][len] = nil
     lua_pushnil(L);
     lua_rawseti(L,-2,len);
 
-    printf("on_leave_function succ %s, cllen=%d\n", ar->name, (int)luaL_len(L, -1));
+    printf("on_leave_function succ %s, cslen=%llu\n", ar->name, luaL_len(L, -1));
 
-    return 1;
+    return 0;
 }
 static void 
 hook_callback(lua_State* L, lua_Debug* ar) {
@@ -139,9 +139,9 @@ hook_callback(lua_State* L, lua_Debug* ar) {
 
     //printf("hook_callback what=%s, name=%s, top=%d\n", ar->what, ar->name, lua_gettop(L));
 
-    if (strcmp(ar->what, "Lua") != 0) { // Only hook Lua functions
-        return; 
-    }
+    //if (strcmp(ar->what, "Lua") != 0) { // Only hook Lua functions
+    //    return; 
+    //}
 
     if (ar->event == LUA_HOOKRET) {
         on_leave_function(L, ar);
@@ -275,6 +275,30 @@ timing_resume(lua_State *L) {
 		lua_rawset(L, lua_upvalueindex(1));	// set start time
 	}
 
+    // check if this thread is in hook,
+    // then update total yield time into last callstack item
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
+    lua_pushthread(L);
+    lua_rawget(L, -2);
+    if (!lua_isnil(L,-1)) {
+        lua_Integer len = luaL_len(L, -1);
+        if (len > 0) {
+            lua_rawgeti(L, -1, len);
+            lua_getfield(L, -1, "yield_time");
+            if (lua_isnil(L, -1)){
+                return luaL_error(L, "Can't find field 'yield_time' in last callstack item.");
+            }
+            double ti = diff_time(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "total_yield_time");
+            double tt = lua_tonumber(L, -1);
+            tt += ti;
+            lua_setfield(L, -2, "total_yield_time");
+            lua_pop(L, 1);
+        }
+    }
+
+    lua_pop(L, 2);
 	lua_CFunction co_resume = lua_tocfunction(L, lua_upvalueindex(3));
 
 	return co_resume(L);
@@ -324,6 +348,24 @@ timing_yield(lua_State *L) {
 		lua_rawset(L, lua_upvalueindex(2));
 		lua_pop(L, 1);	// pop coroutine
 	}
+
+    // check if this thread is in hook,
+    // if so, record this 'yield' into last callstack item.
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
+    lua_pushthread(L);
+    lua_rawget(L, -2);
+    if (!lua_isnil(L,-1)) {
+        lua_Integer len = luaL_len(L, -1);
+        if (len > 0) {
+            lua_rawgeti(L, -1, len);
+            lua_pushnumber(L, get_time());
+            lua_setfield(L, -1, "yield_time");
+            lua_pushnumber(L, 0.0);
+            lua_setfield(L, -1, "total_yield_time");
+            lua_pop(L, 1);
+        }
+    }
+    lua_pop(L, 2);
 
 	lua_CFunction co_yield = lua_tocfunction(L, lua_upvalueindex(3));
 

@@ -9,7 +9,7 @@ end
 local function foo()
     a = 3
     _foo()
-    --skynet.sleep(100)
+    skynet.sleep(500)
     --local a = 2
    -- print("===foo===")
 end
