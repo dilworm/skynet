@@ -8,8 +8,10 @@ end
 
 local function foo()
     a = 3
-    _foo()
-    skynet.sleep(500)
+    for i = 1, 1 do
+        _foo()
+        skynet.sleep(100)
+    end
     --local a = 2
    -- print("===foo===")
 end

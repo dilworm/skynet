@@ -8,7 +8,7 @@ local pairs = pairs
 local pcall = pcall
 local table = table
 
-local profile = require "profile"
+local profile = require "profile_ex"
 
 local coroutine_resume = profile.resume
 local coroutine_yield = profile.yield

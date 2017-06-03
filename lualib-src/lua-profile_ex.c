@@ -21,6 +21,29 @@
 static int callstack_id;
 static int stat_id;
 
+static double 
+get_realtime()
+{
+	struct timespec ti;
+	clock_gettime(CLOCK_REALTIME, &ti);
+
+	int sec = ti.tv_sec & 0xffff;
+	int nsec = ti.tv_nsec;
+
+	return (double)sec + (double)nsec / NANOSEC;	
+}
+
+static double 
+diff_realtime(double start)
+{
+	double now = get_realtime();
+	if (now < start) {
+		return now + 0x10000 - start;
+	} else {
+		return now - start;
+	}
+}
+
 static double
 get_time() {
 #if  !defined(__APPLE__)
@@ -58,18 +81,18 @@ diff_time(double start) {
 
 static int
 on_enter_function(lua_State* L, lua_Debug* ar) {
-    //printf("on_enter_function name=%s, top=%d\n", ar->name, lua_gettop(L));
     int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
+    //printf("on_enter_function name=%s, thread=%p\n", ar->name, lua_tothread(L,-1));
     lua_rawget(L, -2); // get callstack table for this thread
 
-    int newtable = 0;
+    int newcallstack= 0;
     if (lua_isnil(L, -1)) { 
         lua_pop(L, 1);
         lua_pushthread(L);
         lua_newtable(L);
-        newtable = 1;
+        newcallstack= 1;
     }
 
     lua_Integer len = luaL_len(L, -1);
@@ -77,7 +100,6 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     // new callstack item for this call
     lua_newtable(L); 
     lua_pushvalue(L, funcindex); 
-    //printf("enterfunc=%s, %d, %p\n", ar->name, lua_type(L, funcindex), lua_topointer(L, funcindex));
     lua_setfield(L, -2, "func");
     lua_pushinteger(L, ar->linedefined);
     lua_setfield(L, -2, "linedefined");
@@ -85,23 +107,60 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_setfield(L, -2, "short_src");
     lua_pushstring(L, ar->name);
     lua_setfield(L, -2, "name");
-    lua_pushnumber(L, get_time());
+    lua_pushnumber(L, get_realtime());
     lua_setfield(L, -2, "enter_time");
+    lua_pushnumber(L, 0);
+    lua_setfield(L, -2, "total_yield_time");
 
     // push callstack item
     lua_rawseti(L, -2, len+1);
-    //printf("on_enter_function cllen=%d", (int)luaL_len(L, -1));
 
-    if (newtable == 1) {
+    if (newcallstack == 1) {
         lua_rawset(L, -3);
     }
 
-    printf("on_enter_function succ, short_src=%s, name=%s, new=%d cslen=%llu\n", ar->source, ar->name, newtable, len+1);
+    // update stat info
+    int newstattable = 0;
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    lua_pushvalue(L, funcindex);
+    lua_rawget(L, -2);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        newstattable = 0;
+        lua_newtable(L); // new stat table for this function, stat[func] = {}
+        lua_pushstring(L, ar->name);
+        lua_setfield(L, -2, "name");
+        lua_pushinteger(L, ar->linedefined);
+        lua_setfield(L, -2, "linedefined");
+        lua_pushstring(L, ar->short_src);
+        lua_setfield(L, -2, "short_src");
+        lua_pushinteger(L, 0);
+        lua_setfield(L, -2, "count");
+        lua_pushnumber(L, 0.0);
+        lua_setfield(L, -2, "totaltime");
+    }
+
+    // increase stat[func]["count"]
+    lua_getfield(L, -1, "count");
+    lua_Integer c = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_pushinteger(L, ++c);
+    lua_setfield(L, -2, "count");
+
+    if (newstattable) {
+        lua_pushvalue(L, funcindex);
+        lua_pushvalue(L, -2);
+        lua_rawset(L, -4);
+    }
+
+    printf("on_enter_function succ, short_src=%s, name=%s, cslen=%llu, %p\n", 
+            ar->source, ar->name, len+1, lua_topointer(L, funcindex));
     return 0;
 }
 
 static int 
 on_leave_function(lua_State* L, lua_Debug* ar) {
+    double cur_time = get_realtime();
     //if (strcmp("foo", ar->name) == 0)
         //luaL_error(L, "=====enter leave %s", ar->name);
     //printf("on_leave_function name=%s, top=%d %d\n", ar->name, lua_gettop(L), lua_type(L,-1));
@@ -118,21 +177,58 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
     if (!lua_istable(L, -1)) { return 0; }
     lua_getfield(L, -1, "func");
     //printf("on_leave_function %s=%p\n", ar->name, lua_topointer(L, -1));
-    int equal = lua_rawequal(L, -1, funcindex); // check callstack item is the one we push in on_enter_function.
+    // check callstack item is the one we push in on_enter_function.
+    int equal = lua_rawequal(L, -1, funcindex); 
     if (equal != 1) {
         return luaL_error(L, "find no enter func for '%s' leave.", ar->name);
     }
-
-    lua_pop(L, 2);
+    lua_getfield(L, -2, "total_yield_time");
+    double total_yield_time = lua_tonumber(L, -1);
+    lua_getfield(L, -3, "enter_time");
+    double enter_time = lua_tointeger(L, -1);
+    
+    lua_pop(L, 4);
 
     // pop callstack item  callstack[co][len] = nil
     lua_pushnil(L);
     lua_rawseti(L,-2,len);
 
-    printf("on_leave_function succ %s, cslen=%llu\n", ar->name, luaL_len(L, -1));
+    // accumulate total yield time to upper level callstack item
+    if (--len > 0) {
+        lua_rawgeti(L, -1, len);
+        lua_getfield(L, -1, "total_yield_time");
+        double ytt = lua_tonumber(L, -1);
+        ytt += total_yield_time;
+        lua_pop(L,1);
+        lua_pushnumber(L, ytt);
+        lua_setfield(L, -2, "total_yield_time");
+    }
+    lua_pop(L,1);
+
+    printf("on_leave_function succ %s, ytt=%f, len=%llu, %p\n", 
+            ar->name, total_yield_time, luaL_len(L, -1), lua_topointer(L, funcindex));
+
+    // update totaltime of this function
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    lua_pushvalue(L, funcindex);
+    lua_rawget(L, -2);
+    
+    if (!lua_isnil(L, -1)) {
+        double ti = cur_time - enter_time - total_yield_time;
+        lua_getfield(L, -1, "totaltime");
+        double tt = lua_tonumber(L, -1);
+        lua_pop(L, -1);
+        tt += ti;
+        lua_pushnumber(L, tt); 
+        lua_setfield(L, -2, "totaltime");
+        printf("===========on_leave_function, totaltime = %f", tt);
+    }
+
+    lua_settop(L, funcindex);
 
     return 0;
 }
+
 static void 
 hook_callback(lua_State* L, lua_Debug* ar) {
     lua_getinfo(L, "nfS", ar); // 'f' indicate that 'func' is pushed into the stack.
@@ -278,23 +374,26 @@ timing_resume(lua_State *L) {
     // check if this thread is in hook,
     // then update total yield time into last callstack item
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
-    lua_pushthread(L);
+    lua_pushvalue(L,1); // the first parament is the coroutine being resume.
     lua_rawget(L, -2);
     if (!lua_isnil(L,-1)) {
         lua_Integer len = luaL_len(L, -1);
         if (len > 0) {
             lua_rawgeti(L, -1, len);
             lua_getfield(L, -1, "yield_time");
-            if (lua_isnil(L, -1)){
-                return luaL_error(L, "Can't find field 'yield_time' in last callstack item.");
+            if (!lua_isnil(L, -1)){
+                double ti = diff_realtime(lua_tonumber(L, -1));
+                //printf("==============yield time = %f, resume time=%f\n", lua_tonumber(L, -1), get_realtime());
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "total_yield_time");
+                double tt = lua_tonumber(L, -1);
+                lua_pop(L, 1);
+                tt += ti;
+                lua_pushnumber(L, tt);
+                lua_setfield(L, -2, "total_yield_time");
+                lua_pop(L, 1);
+                //printf("==============total yield time = %f",tt); 
             }
-            double ti = diff_time(lua_tonumber(L, -1));
-            lua_pop(L, 1);
-            lua_getfield(L, -1, "total_yield_time");
-            double tt = lua_tonumber(L, -1);
-            tt += ti;
-            lua_setfield(L, -2, "total_yield_time");
-            lua_pop(L, 1);
         }
     }
 
@@ -349,8 +448,8 @@ timing_yield(lua_State *L) {
 		lua_pop(L, 1);	// pop coroutine
 	}
 
-    // check if this thread is in hook,
-    // if so, record this 'yield' into last callstack item.
+    // if this thread is in hook,
+    // then save this 'yield' into last callstack item.
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
     lua_rawget(L, -2);
@@ -358,10 +457,9 @@ timing_yield(lua_State *L) {
         lua_Integer len = luaL_len(L, -1);
         if (len > 0) {
             lua_rawgeti(L, -1, len);
-            lua_pushnumber(L, get_time());
-            lua_setfield(L, -1, "yield_time");
-            lua_pushnumber(L, 0.0);
-            lua_setfield(L, -1, "total_yield_time");
+            lua_pushnumber(L, get_realtime());
+            lua_setfield(L, -2, "yield_time");
+            //printf("===============yield time=%f",get_realtime());
             lua_pop(L, 1);
         }
     }
