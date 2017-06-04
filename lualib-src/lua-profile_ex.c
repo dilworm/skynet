@@ -117,7 +117,6 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_rawseti(L, -2, len+1);
 
     if (newcallstack == 1) {
-        printf("== 新callstack\n");
         lua_rawset(L, -3);
     }
 
@@ -128,7 +127,6 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     if (lua_isnil(L, -1)) {
-        printf("新统计表 %f, %s, %p, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex), p);
         lua_pop(L, 1);
         newstattable = 1;
         lua_pushvalue(L, funcindex);
@@ -153,7 +151,6 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_setfield(L, -2, "count");
 
     if (newstattable) {
-        printf("添加统计表 %f, %s, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex));
         lua_rawset(L, -3);
     }
 
@@ -165,9 +162,6 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
 static int 
 on_leave_function(lua_State* L, lua_Debug* ar) {
     double cur_time = get_realtime();
-    //if (strcmp("foo", ar->name) == 0)
-        //luaL_error(L, "=====enter leave %s", ar->name);
-    //printf("on_leave_function name=%s, top=%d %d\n", ar->name, lua_gettop(L), lua_type(L,-1));
     int funcindex = lua_gettop(L);
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&callstack_id);
     lua_pushthread(L);
@@ -180,7 +174,7 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
     lua_rawgeti(L, -1, len); // get callstack item for this function
     if (!lua_istable(L, -1)) { return 0; }
     lua_getfield(L, -1, "func");
-    //printf("on_leave_function %s=%p\n", ar->name, lua_topointer(L, -1));
+
     // check callstack item is the one we push in on_enter_function.
     int equal = lua_rawequal(L, -1, funcindex); 
     if (equal != 1) {
@@ -211,7 +205,6 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
 
     // update totaltime of this function
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
-    //printf("leave注册表 %p\n", lua_topointer(L, -1));
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     
@@ -299,6 +292,11 @@ lunhook(lua_State* L) {
     lua_sethook(L1, NULL, 0, 0);
 
     return 0;
+}
+
+static int lget_stat(lua_State* L) {
+    lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    return 1;
 }
 
 static int
@@ -506,6 +504,7 @@ luaopen_profile_ex(lua_State *L) {
 		{ "yield_co", lyield_co },
 		{ "hook", lhook},
 		{ "unhook", lunhook},
+		{ "get_stat", lget_stat},
 		{ NULL, NULL },
 	};
 	luaL_newlibtable(L,l);

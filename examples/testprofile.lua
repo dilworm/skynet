@@ -20,6 +20,10 @@ local function test()
     p.hook()
     --skynet.sleep(100)
     foo()
+    stat = p.get_stat()
+    for _, v in pairs(stat) do
+        print(v.name, v.count, v.totaltime)
+    end
     --p.unhook()
 end
 
