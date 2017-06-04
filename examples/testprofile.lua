@@ -2,24 +2,23 @@ local skynet = require "skynet"
 local p = require "profile_ex"
 
 local a = 0
-local function _foo()
-    a = 2
+local function _foo(i)
+    a = i
 end
 
 local function foo()
-    a = 3
-    for i = 1, 1 do
-        _foo()
-        skynet.sleep(100)
+    for i = 1,100000 do
+        _foo(i)
     end
-    --local a = 2
-   -- print("===foo===")
+    print("&&&&&&& ".. a.." \n")
+    --skynet.sleep(100)
 end
 
 local function test()
     print ("=========================test=============================")
 
     p.hook()
+    --skynet.sleep(100)
     foo()
     --p.unhook()
 end
@@ -27,4 +26,6 @@ end
 skynet.start(function() 
     skynet.dispatch("lua", function(session, addr, cmd, ...) end)
     skynet.fork(test)
+    --skynet.fork(test)
+    --skynet.fork(test)
 end)

@@ -7,6 +7,7 @@
 
 #include <time.h>
 #include <string.h>
+//#include <pthread.h>
 
 #if defined(__APPLE__)
 #include <mach/task.h>
@@ -116,6 +117,7 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_rawseti(L, -2, len+1);
 
     if (newcallstack == 1) {
+        printf("== 新callstack\n");
         lua_rawset(L, -3);
     }
 
@@ -125,8 +127,10 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     if (lua_isnil(L, -1)) {
+        printf("新统计表 %f, %s, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex));
         lua_pop(L, 1);
-        newstattable = 0;
+        newstattable = 1;
+        lua_pushvalue(L, funcindex);
         lua_newtable(L); // new stat table for this function, stat[func] = {}
         lua_pushstring(L, ar->name);
         lua_setfield(L, -2, "name");
@@ -148,13 +152,12 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     lua_setfield(L, -2, "count");
 
     if (newstattable) {
-        lua_pushvalue(L, funcindex);
-        lua_pushvalue(L, -2);
-        lua_rawset(L, -4);
+        printf("添加统计表 %f, %s, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex));
+        lua_rawset(L, -3);
     }
 
-    printf("on_enter_function succ, short_src=%s, name=%s, cslen=%llu, %p\n", 
-            ar->source, ar->name, len+1, lua_topointer(L, funcindex));
+    //printf("on_enter_function succ, short_src=%s, name=%s, cslen=%llu, %p\n", 
+    //        ar->source, ar->name, len+1, lua_topointer(L, funcindex));
     return 0;
 }
 
@@ -185,7 +188,7 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
     lua_getfield(L, -2, "total_yield_time");
     double total_yield_time = lua_tonumber(L, -1);
     lua_getfield(L, -3, "enter_time");
-    double enter_time = lua_tointeger(L, -1);
+    double enter_time = lua_tonumber(L, -1);
     
     lua_pop(L, 4);
 
@@ -205,24 +208,28 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
     }
     lua_pop(L,1);
 
-    printf("on_leave_function succ %s, ytt=%f, len=%llu, %p\n", 
-            ar->name, total_yield_time, luaL_len(L, -1), lua_topointer(L, funcindex));
-
     // update totaltime of this function
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     
+    double tt = 0.0;
+    long long count = 0;
     if (!lua_isnil(L, -1)) {
         double ti = cur_time - enter_time - total_yield_time;
         lua_getfield(L, -1, "totaltime");
-        double tt = lua_tonumber(L, -1);
-        lua_pop(L, -1);
+        tt = lua_tonumber(L, -1);
+        lua_pop(L, 1);
         tt += ti;
         lua_pushnumber(L, tt); 
         lua_setfield(L, -2, "totaltime");
-        printf("===========on_leave_function, totaltime = %f", tt);
+        lua_getfield(L, -1, "count");
+        count = lua_tointeger(L, -1);
     }
+
+    //printf("on_leave_function succ %s, count = %llu, totaltime = %f, enter_time = %f,\
+    //        yield_time = %f, %p\n", 
+    //        ar->name, count, tt, enter_time, total_yield_time, lua_topointer(L, funcindex));
 
     lua_settop(L, funcindex);
 
