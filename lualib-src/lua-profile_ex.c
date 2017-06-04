@@ -299,6 +299,12 @@ static int lget_stat(lua_State* L) {
     return 1;
 }
 
+static int lreset_stat(lua_State* L) {
+    lua_newtable(L);
+    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    return 0;
+}
+
 static int
 lstart(lua_State *L) {
 	if (lua_gettop(L) != 0) {
@@ -505,6 +511,7 @@ luaopen_profile_ex(lua_State *L) {
 		{ "hook", lhook},
 		{ "unhook", lunhook},
 		{ "get_stat", lget_stat},
+		{ "reset_stat", lreset_stat},
 		{ NULL, NULL },
 	};
 	luaL_newlibtable(L,l);

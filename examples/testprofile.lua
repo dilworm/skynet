@@ -24,12 +24,13 @@ local function test()
     for _, v in pairs(stat) do
         print(v.name, v.count, v.totaltime)
     end
+    p.reset_stat();
     --p.unhook()
 end
 
 skynet.start(function() 
     skynet.dispatch("lua", function(session, addr, cmd, ...) end)
     skynet.fork(test)
-    --skynet.fork(test)
-    --skynet.fork(test)
+    skynet.fork(test)
+    skynet.fork(test)
 end)
