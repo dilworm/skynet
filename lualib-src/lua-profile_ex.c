@@ -124,10 +124,11 @@ on_enter_function(lua_State* L, lua_Debug* ar) {
     // update stat info
     int newstattable = 0;
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    const void* p = lua_topointer(L, -1);
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     if (lua_isnil(L, -1)) {
-        printf("新统计表 %f, %s, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex));
+        printf("新统计表 %f, %s, %p, %p\n", get_realtime(), ar->name, lua_topointer(L, funcindex), p);
         lua_pop(L, 1);
         newstattable = 1;
         lua_pushvalue(L, funcindex);
@@ -210,6 +211,7 @@ on_leave_function(lua_State* L, lua_Debug* ar) {
 
     // update totaltime of this function
     lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
+    //printf("leave注册表 %p\n", lua_topointer(L, -1));
     lua_pushvalue(L, funcindex);
     lua_rawget(L, -2);
     
@@ -524,10 +526,10 @@ luaopen_profile_ex(lua_State *L) {
 
     // ------------------------------------------------------------------------
     lua_newtable(L);    // functions -> {functionN = {time, count, file, name}, ...}
-	lua_newtable(L);	// weak table
-	lua_pushliteral(L, "kv");
-	lua_setfield(L, -2, "__mode");
-	lua_setmetatable(L, -2);
+	//lua_newtable(L);	// weak table
+	//lua_pushliteral(L, "kv");
+	//lua_setfield(L, -2, "__mode");
+	//lua_setmetatable(L, -2);
 
     lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)&stat_id);
 

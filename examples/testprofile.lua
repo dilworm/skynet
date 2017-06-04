@@ -7,7 +7,7 @@ local function _foo(i)
 end
 
 local function foo()
-    for i = 1,100000 do
+    for i = 1,10000 do
         _foo(i)
     end
     print("&&&&&&& ".. a.." \n")
