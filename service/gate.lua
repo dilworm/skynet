@@ -1,14 +1,6 @@
 local skynet = require "skynet"
-<<<<<<< HEAD
-local gateserver = require "ws.ws_gateserver"
-local netpack = require "netpack"
-||||||| merged common ancestors
-local gateserver = require "snax.gateserver"
-local netpack = require "netpack"
-=======
 local gateserver = require "snax.gateserver"
 local netpack = require "skynet.netpack"
->>>>>>> upstream/master
 
 local watchdog
 local connection = {}	-- fd -> connection : { fd , client, agent , ip, mode }
@@ -37,7 +29,6 @@ function handler.message(fd, msg, sz)
 end
 
 function handler.connect(fd, addr)
-    print("gate handler.connect ", fd, addr)
 	local c = {
 		fd = fd,
 		ip = addr,
