@@ -10,21 +10,21 @@ local function foo()
     for i = 1,10000 do
         _foo(i)
     end
-    print("&&&&&&& ".. a.." \n")
-    --skynet.sleep(100)
+    skynet.error(string.format("%s ---before sleep", coroutine.running()))
+    skynet.sleep(math.random(200,300))
+    skynet.error(string.format("%s ---after sleep", coroutine.running()))
 end
 
 local function test()
-    print ("=========================test=============================")
+    skynet.error("=========================test=============================")
 
     p.hook()
-    --skynet.sleep(100)
     foo()
     stat = p.get_stat()
     for _, v in pairs(stat) do
-        print(v.name, v.count, v.totaltime)
+        skynet.error(string.format("%s|%-15s |%-10s |%-10.9f", coroutine.running(),v.name, v.count, v.totaltime))
     end
-    p.reset_stat();
+    --p.reset_stat();
     --p.unhook()
 end
 
