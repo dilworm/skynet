@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local p = require "profile_ex"
+local p = require "skynet.profile_ex"
 
 local a = 0
 local function _foo(i)

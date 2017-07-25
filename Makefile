@@ -56,6 +56,7 @@ LUA_CLIB_SKYNET = \
   lua-netpack.c \
   lua-memory.c \
   lua-profile.c \
+  lua-profile_ex.c \
   lua-multicast.c \
   lua-cluster.c \
   lua-crypt.c lsha1.c \
