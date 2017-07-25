@@ -8,7 +8,13 @@ local pairs = pairs
 local pcall = pcall
 local table = table
 
+<<<<<<< HEAD
 local profile = require "profile_ex"
+||||||| merged common ancestors
+local profile = require "profile"
+=======
+local profile = require "skynet.profile"
+>>>>>>> upstream/master
 
 local coroutine_resume = profile.resume
 local coroutine_yield = profile.yield
